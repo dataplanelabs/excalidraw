@@ -27,7 +27,7 @@ import {
   BroadcastResult
 } from './types.js';
 import * as store from './db.js';
-import { initDb, listTenants as dbListTenants, getActiveTenant as dbGetActiveTenant, setActiveTenant as dbSetActiveTenant, getDefaultProjectForTenant, getCurrentSyncVersion, getChangesSince } from './db.js';
+import { initDb, listTenants as dbListTenants, getActiveTenant as dbGetActiveTenant, setActiveTenant as dbSetActiveTenant, ensureTenant as dbEnsureTenant, getDefaultProjectForTenant, getCurrentSyncVersion, getChangesSince } from './db.js';
 import { z } from 'zod';
 import WebSocket from 'ws';
 
@@ -1433,6 +1433,25 @@ app.get('/api/tenants', (req: Request, res: Response) => {
     res.json({ success: true, tenants, activeTenantId: active.id });
   } catch (error) {
     logger.error('Error listing tenants:', error);
+    res.status(500).json({ success: false, error: (error as Error).message });
+  }
+});
+
+// Idempotent tenant + default-project ensure. Called by the HTTP MCP shim's
+// tenant-resolver on every request so canvas DB has matching tenant rows
+// before element inserts (avoids FK constraint failures in multi-pod setups).
+// Side effect: setActiveTenant auto-creates a default project (db.ts lines 500-505).
+app.post('/api/tenants', (req: Request, res: Response) => {
+  try {
+    const { id, name, workspacePath } = req.body || {};
+    if (!id || typeof id !== 'string' || !name || typeof name !== 'string') {
+      return res.status(400).json({ success: false, error: 'id and name are required' });
+    }
+    const tenant = dbEnsureTenant(id, name, workspacePath || `http:${name}`);
+    dbSetActiveTenant(id);
+    res.json({ success: true, tenant });
+  } catch (error) {
+    logger.error('Error ensuring tenant:', error);
     res.status(500).json({ success: false, error: (error as Error).message });
   }
 });
