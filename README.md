@@ -1,20 +1,19 @@
-# MCP Excalidraw Local
+# DataPlaneLabs Excalidraw
 
-[![CI](https://github.com/sanjibdevnathlabs/mcp-excalidraw-local/actions/workflows/ci.yml/badge.svg)](https://github.com/sanjibdevnathlabs/mcp-excalidraw-local/actions/workflows/ci.yml)
-[![Release & Publish](https://github.com/sanjibdevnathlabs/mcp-excalidraw-local/actions/workflows/release.yml/badge.svg)](https://github.com/sanjibdevnathlabs/mcp-excalidraw-local/actions/workflows/release.yml)
+[![CI](https://github.com/dataplanelabs/excalidraw/actions/workflows/ci.yml/badge.svg)](https://github.com/dataplanelabs/excalidraw/actions/workflows/ci.yml)
+[![Docker](https://github.com/dataplanelabs/excalidraw/actions/workflows/docker.yml/badge.svg)](https://github.com/dataplanelabs/excalidraw/actions/workflows/docker.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A fully local, self-hosted Excalidraw MCP server with **SQLite persistence**, **multi-tenancy**, and **auto-sync** — designed to run entirely on your machine without depending on `excalidraw.com`.
+Self-hosted Excalidraw with MCP control. Adds a remote HTTP MCP transport on top of the upstream stdio server so the canvas at `draw.dataplanelabs.com` can be controlled from any MCP client over the network.
 
 Run a live Excalidraw canvas and control it from any AI agent. This repo provides:
 
-- **MCP Server**: 32 tools over stdio — works with any MCP-compatible client
-- **Agent Skill**: Portable skill with workflow playbooks, cheatsheets, and helper scripts
+- **HTTP MCP Server**: 32 tools over Streamable HTTP (`/mcp`) with bearer auth and `X-Tenant-Id` scoping
 - **Live Canvas**: Real-time Excalidraw UI synced via WebSocket
 - **SQLite Persistence**: Elements survive restarts, with versioning and search
-- **Multi-Tenancy**: Isolated canvases per workspace, auto-detected
+- **Multi-Tenancy**: Isolated canvases per workspace via header
 
-> **Fork notice:** This project is forked from [yctimlin/mcp_excalidraw](https://github.com/yctimlin/mcp_excalidraw) and extends it with persistence, multi-workspace support, and numerous UX improvements. Full credit to the original author for the excellent foundation. See [What Changed From Upstream](#what-changed-from-upstream) for details.
+> **Fork notice:** This is the DataPlaneLabs fork of [sanjibdevnathlabs/mcp-excalidraw-local](https://github.com/sanjibdevnathlabs/mcp-excalidraw-local), which itself forked [yctimlin/mcp_excalidraw](https://github.com/yctimlin/mcp_excalidraw). Full credit to upstream authors. This fork adds remote HTTP MCP transport and Kubernetes deployment manifests in [dataplanelabs/infra](https://github.com/dataplanelabs/infra). See [UPSTREAM.md](UPSTREAM.md) for the rebase procedure.
 
 Keywords: Excalidraw MCP server, AI diagramming, local Excalidraw, self-hosted, SQLite persistence, multi-tenant, Mermaid to Excalidraw.
 

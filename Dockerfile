@@ -43,6 +43,7 @@ ENV EXCALIDRAW_DB_PATH=/app/data/excalidraw.db
 
 CMD ["node", "dist/index.js"]
 
-LABEL org.opencontainers.image.source="https://github.com/sanjibdevnathlabs/mcp-excalidraw-local"
-LABEL org.opencontainers.image.description="MCP Excalidraw Server - Model Context Protocol for AI agents (with SQLite persistence & multi-tenancy)"
+LABEL org.opencontainers.image.source="https://github.com/dataplanelabs/excalidraw"
+LABEL org.opencontainers.image.vendor="DataPlaneLabs"
+LABEL org.opencontainers.image.description="DataPlaneLabs Excalidraw MCP Server (HTTP transport, SQLite persistence, multi-tenancy)"
 LABEL org.opencontainers.image.licenses="MIT"

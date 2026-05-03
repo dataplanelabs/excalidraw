@@ -1,11 +1,11 @@
 {
-  "name": "@sanjibdevnath/mcp-excalidraw-local",
+  "name": "@dataplanelabs/excalidraw",
   "version": "1.6.2",
-  "description": "Fully local MCP server for Excalidraw with SQLite persistence, multi-tenancy, auto-sync, real-time canvas, and 32 tools",
+  "description": "Self-hosted Excalidraw with MCP control — DataPlaneLabs fork of mcp-excalidraw-local with remote HTTP MCP, multi-tenancy, and SQLite persistence",
   "main": "dist/index.js",
   "type": "module",
   "bin": {
-    "mcp-excalidraw-local": "dist/index.js"
+    "dataplanelabs-excalidraw": "dist/index.js"
   },
   "scripts": {
     "start": "npm run build:server && node dist/index.js",
@@ -27,7 +27,8 @@
     "test:api": "vitest run tests/backend/api.test.ts",
     "test:ws": "vitest run tests/backend/ws.test.ts",
     "test:e2e": "npx playwright test",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "start:http": "npm run build:server && node dist/mcp-http-shim/server.js"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.0",
@@ -82,9 +83,13 @@
     "local"
   ],
   "author": {
-    "name": "sanjibdevnathlabs"
+    "name": "DataPlaneLabs"
   },
   "contributors": [
+    {
+      "name": "sanjibdevnathlabs",
+      "url": "https://github.com/sanjibdevnathlabs"
+    },
     {
       "name": "yctimlin",
       "email": "c22647809@gmail.com",
@@ -94,11 +99,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sanjibdevnathlabs/mcp-excalidraw-local.git"
+    "url": "https://github.com/dataplanelabs/excalidraw.git"
   },
-  "homepage": "https://github.com/sanjibdevnathlabs/mcp-excalidraw-local#readme",
+  "homepage": "https://github.com/dataplanelabs/excalidraw#readme",
   "bugs": {
-    "url": "https://github.com/sanjibdevnathlabs/mcp-excalidraw-local/issues"
+    "url": "https://github.com/dataplanelabs/excalidraw/issues"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -109,10 +114,7 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
-  },
+  "private": true,
   "files": [
     "dist/**/*",
     "skills/**/*",
