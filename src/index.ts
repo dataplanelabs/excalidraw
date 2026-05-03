@@ -136,10 +136,16 @@ interface SyncResponse {
   canvasStatus?: CanvasStatus;
 }
 
+// Per-request tenant override for HTTP transport. When set (via AsyncLocalStorage
+// in mcp-http-shim/tenant-context.ts), `canvasHeaders()` uses this tenant instead
+// of the globally-active tenant. Stdio mode keeps the previous behavior.
+import { tenantContext } from './mcp-http-shim/tenant-context.js';
+
 function canvasHeaders(extra?: Record<string, string>): Record<string, string> {
+  const ctx = tenantContext.getStore();
   return {
     'Content-Type': 'application/json',
-    'X-Tenant-Id': dbGetActiveTenantId(),
+    'X-Tenant-Id': ctx?.tenantId ?? dbGetActiveTenantId(),
     ...extra
   };
 }
@@ -1043,7 +1049,7 @@ function convertTextToLabel(element: ServerElement): ServerElement {
 }
 
 // Set up request handler for tool calls
-server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest) => {
+const callToolHandler = async (request: CallToolRequest) => {
   try {
     const { name, arguments: args } = request.params;
     logger.info(`Handling tool call: ${name}`);
@@ -2757,13 +2763,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request: CallToolRequest)
       isError: true
     };
   }
-});
+};
+server.setRequestHandler(CallToolRequestSchema, callToolHandler);
 
 // Set up request handler for listing available tools
-server.setRequestHandler(ListToolsRequestSchema, async () => {
+const listToolsHandler = async () => {
   logger.info('Listing available tools');
   return { tools };
-});
+};
+server.setRequestHandler(ListToolsRequestSchema, listToolsHandler);
+
+// Factory used by the HTTP transport (mcp-http-shim) — every HTTP request gets
+// a fresh Server instance so concurrent requests don't share transport state.
+// Same handler closures are reused across instances (they're closures over
+// module-level state, which is safe because tenant scoping is enforced per
+// request via AsyncLocalStorage).
+export function createMcpServer(): Server {
+  const s = new Server(
+    {
+      name: "mcp-excalidraw-server",
+      version: "2.0.0",
+      description: "Programmatic canvas toolkit for Excalidraw with file I/O, image export, and real-time sync"
+    },
+    {
+      capabilities: {
+        tools: Object.fromEntries(tools.map(tool => [tool.name, {
+          description: tool.description,
+          inputSchema: tool.inputSchema
+        }]))
+      }
+    }
+  );
+  s.setRequestHandler(CallToolRequestSchema, callToolHandler);
+  s.setRequestHandler(ListToolsRequestSchema, listToolsHandler);
+  return s;
+}
+
+export { server };
 
 // Start server
 async function runServer(): Promise<void> {
@@ -2927,6 +2963,12 @@ if (isMainModule()) {
       process.exit(1);
     }
     process.exit(0);
+  } else if (process.env.MCP_TRANSPORT === 'http') {
+    // HTTP transport delegates startup to mcp-http-shim entrypoint
+    import('./mcp-http-shim/server.js').then(m => m.startHttpServer()).catch(error => {
+      logger.error('Failed to start HTTP MCP server:', error);
+      process.exit(1);
+    });
   } else {
     runServer().catch(error => {
       logger.error('Failed to start server:', error);

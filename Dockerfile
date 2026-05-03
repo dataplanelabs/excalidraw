@@ -40,6 +40,11 @@ ENV NODE_ENV=production
 ENV EXPRESS_SERVER_URL=http://localhost:3000
 ENV ENABLE_CANVAS_SYNC=true
 ENV EXCALIDRAW_DB_PATH=/app/data/excalidraw.db
+# MCP_TRANSPORT=http selects the Streamable HTTP shim (mcp-http-shim/server.ts);
+# leave unset (or =stdio) to keep upstream stdio behavior for local dev.
+# When http: also set MCP_AUTH_TOKEN, EXPRESS_SERVER_URL, PORT.
+ENV MCP_TRANSPORT=http
+EXPOSE 3000
 
 CMD ["node", "dist/index.js"]
 
