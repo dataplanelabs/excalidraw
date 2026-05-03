@@ -237,7 +237,9 @@ async function syncToCanvas(operation: string, data: any): Promise<SyncResponse 
 }
 
 // Helper to sync element creation to canvas
-async function createElementOnCanvas(elementData: ServerElement): Promise<SyncResponse | null> {
+// id is optional: when absent, the server derives a deterministic content-based
+// id (see deriveContentId in src/server.ts). Same content → same id → upsert.
+async function createElementOnCanvas(elementData: Omit<ServerElement, 'id'> & { id?: string }): Promise<SyncResponse | null> {
   const result = await syncToCanvas('create', elementData);
   return result ?? null;
 }
@@ -255,7 +257,7 @@ async function deleteElementOnCanvas(elementId: string): Promise<any> {
 }
 
 // Helper to sync batch creation to canvas
-async function batchCreateElementsOnCanvas(elementsData: ServerElement[]): Promise<SyncResponse | null> {
+async function batchCreateElementsOnCanvas(elementsData: Array<Omit<ServerElement, 'id'> & { id?: string }>): Promise<SyncResponse | null> {
   const result = await syncToCanvas('batch_create', elementsData);
   return result ?? null;
 }
@@ -1060,10 +1062,12 @@ const callToolHandler = async (request: CallToolRequest) => {
         logger.info('Creating element via MCP', { type: params.type });
 
         const { startElementId, endElementId, id: customId, ...elementProps } = params;
-        const id = customId || generateId();
         const normalizedFont = normalizeFontFamily(elementProps.fontFamily);
-        const element: ServerElement = {
-          id,
+        // No id minted here — server derives a content-based deterministic id
+        // (see deriveContentId in src/server.ts) so re-issued create with same
+        // content upserts the existing row instead of duplicating it.
+        const element: Omit<ServerElement, 'id'> & { id?: string } = {
+          ...(customId ? { id: customId } : {}),
           ...elementProps,
           fontFamily: normalizedFont ?? USER_PREFS.fontFamily,
           roughness: elementProps.roughness ?? USER_PREFS.roughness,
@@ -1083,7 +1087,7 @@ const callToolHandler = async (request: CallToolRequest) => {
         }
 
         // Convert text to label format for Excalidraw
-        const excalidrawElement = convertTextToLabel(element);
+        const excalidrawElement = convertTextToLabel(element as ServerElement);
 
         // Create element directly on HTTP server (no local storage)
         const canvasResponse = await createElementOnCanvas(excalidrawElement);
@@ -1093,17 +1097,18 @@ const callToolHandler = async (request: CallToolRequest) => {
         }
 
         const synced = canvasResponse.syncedToCanvas ?? false;
+        const assignedId = canvasResponse.element?.id ?? customId ?? '(server-assigned)';
         logger.info('Element created via MCP', {
-          id: excalidrawElement.id,
+          id: assignedId,
           type: excalidrawElement.type,
           synced,
           canvasStatus: canvasResponse.canvasStatus
         });
 
-        const statusEmoji = synced ? '✅' : '⚠️';
+        const statusEmoji = synced ? '✅' : 'ℹ️';
         const statusText = synced
-          ? 'Synced to canvas and confirmed by browser'
-          : `Canvas sync not confirmed (${canvasResponse.canvasStatus?.reason ?? 'unknown'})`;
+          ? 'Visible on canvas now'
+          : `Persisted. Canvas browser will pick up on reconnect or refresh (${canvasResponse.canvasStatus?.reason ?? 'no_clients'}).`;
 
         return {
           content: [{
@@ -1148,7 +1153,7 @@ const callToolHandler = async (request: CallToolRequest) => {
         return {
           content: [{
             type: 'text', 
-            text: `Element updated successfully!\n\n${JSON.stringify(canvasResponse.element ?? excalidrawElement, null, 2)}\n\n${synced ? '✅ Synced to canvas and confirmed' : `⚠️ Canvas sync not confirmed (${canvasResponse.canvasStatus?.reason ?? 'unknown'})`}` 
+            text: `Element updated successfully!\n\n${JSON.stringify(canvasResponse.element ?? excalidrawElement, null, 2)}\n\n${synced ? '✅ Visible on canvas now' : `ℹ️ Persisted. Canvas browser will pick up on reconnect or refresh (${canvasResponse.canvasStatus?.reason ?? 'no_clients'}).`}`
           }]
         };
       }
@@ -1565,14 +1570,16 @@ const callToolHandler = async (request: CallToolRequest) => {
         const params = z.object({ elements: z.array(ElementSchema) }).parse(args);
         logger.info('Batch creating elements via MCP', { count: params.elements.length });
 
-        const createdElements: ServerElement[] = [];
+        type CreatePayload = Omit<ServerElement, 'id'> & { id?: string };
+        const createdElements: CreatePayload[] = [];
 
         for (const elementData of params.elements) {
           const { startElementId, endElementId, id: customId, ...elementProps } = elementData;
-          const id = customId || generateId();
           const normalizedFont = normalizeFontFamily(elementProps.fontFamily);
-          const element: ServerElement = {
-            id,
+          // Same as create_element: omit id when caller didn't supply one so
+          // the server can derive a content-based deterministic id.
+          const element: CreatePayload = {
+            ...(customId ? { id: customId } : {}),
             ...elementProps,
             fontFamily: normalizedFont ?? USER_PREFS.fontFamily,
             roughness: elementProps.roughness ?? USER_PREFS.roughness,
@@ -1591,7 +1598,7 @@ const callToolHandler = async (request: CallToolRequest) => {
             (element as any).points = [[0, 0], [100, 0]];
           }
 
-          const excalidrawElement = convertTextToLabel(element);
+          const excalidrawElement = convertTextToLabel(element as ServerElement);
           createdElements.push(excalidrawElement);
         }
 
@@ -1615,10 +1622,10 @@ const callToolHandler = async (request: CallToolRequest) => {
           canvasStatus: result.canvasStatus
         });
 
-        const statusEmoji = result.syncedToCanvas ? '✅' : '⚠️';
+        const statusEmoji = result.syncedToCanvas ? '✅' : 'ℹ️';
         const statusText = result.syncedToCanvas
-          ? 'All elements synced to canvas and confirmed by browser'
-          : `Canvas sync not confirmed (${result.canvasStatus?.reason ?? 'unknown'})`;
+          ? 'All elements visible on canvas now'
+          : `Persisted. Canvas browser will pick up on reconnect or refresh (${result.canvasStatus?.reason ?? 'no_clients'}).`;
 
         return {
           content: [{

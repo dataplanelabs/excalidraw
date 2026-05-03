@@ -2,6 +2,7 @@ import express, { type Application, Request, Response, NextFunction } from 'expr
 import cors from 'cors';
 import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
+import { createHash } from 'node:crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -50,6 +51,53 @@ const staticDir = path.join(__dirname, '../dist');
 app.use(express.static(staticDir));
 // Also serve frontend assets
 app.use(express.static(path.join(__dirname, '../dist/frontend')));
+
+// Compute a deterministic ID from element content. Same project + type +
+// position + size + text → same id. Makes element creation idempotent without
+// idempotency keys: a re-issued create with identical content matches the
+// existing row by id and becomes an upsert (version bump). Coords rounded to
+// nearest int to absorb sub-pixel drift across calls. Empty text/refs hashed
+// as "" — unbound shapes still get stable ids. start/end ref ids are part of
+// the input so bound arrows in a batch (which share placeholder coords until
+// resolveArrowBindings runs) don't collapse to one row.
+export function deriveContentId(
+  projectId: string,
+  type: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  text: string | null | undefined,
+  startRefId?: string | null,
+  endRefId?: string | null
+): string {
+  const input = [
+    projectId,
+    type,
+    Math.round(x || 0),
+    Math.round(y || 0),
+    Math.round(width || 0),
+    Math.round(height || 0),
+    text || '',
+    startRefId || '',
+    endRefId || ''
+  ].join('|');
+  return createHash('sha256').update(input).digest('hex').slice(0, 12);
+}
+
+function elementText(el: any): string {
+  if (el?.label?.text) return String(el.label.text);
+  if (typeof el?.text === 'string') return el.text;
+  return '';
+}
+
+function elementStartRef(el: any): string {
+  return el?.start?.id ?? '';
+}
+
+function elementEndRef(el: any): string {
+  return el?.end?.id ?? '';
+}
 
 // Resolve tenant from X-Tenant-Id header to a projectId override.
 // Returns undefined when header is absent (browser requests), falling back to global state.
@@ -447,7 +495,17 @@ app.post('/api/elements', async (req: Request, res: Response) => {
     const params = CreateElementSchema.parse(req.body);
     logger.info('Creating element via API', { type: params.type });
 
-    const id = params.id || generateId();
+    const id = params.id || deriveContentId(
+      projId ?? store.getActiveProjectId(),
+      params.type,
+      params.x,
+      params.y,
+      params.width ?? 0,
+      params.height ?? 0,
+      elementText(params),
+      elementStartRef(params),
+      elementEndRef(params)
+    );
     const normalizedFont = normalizeFontFamily(params.fontFamily);
     const element: ServerElement = {
       id,
@@ -830,9 +888,20 @@ app.post('/api/elements/batch', async (req: Request, res: Response) => {
 
     const createdElements: ServerElement[] = [];
 
+    const effectiveProjId = projId ?? store.getActiveProjectId();
     elementsToCreate.forEach(elementData => {
       const params = CreateElementSchema.parse(elementData);
-      const id = params.id || generateId();
+      const id = params.id || deriveContentId(
+        effectiveProjId,
+        params.type,
+        params.x,
+        params.y,
+        params.width ?? 0,
+        params.height ?? 0,
+        elementText(params),
+        elementStartRef(params),
+        elementEndRef(params)
+      );
       const normalizedFont = normalizeFontFamily(params.fontFamily);
       const element: ServerElement = {
         id,
