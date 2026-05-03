@@ -357,6 +357,28 @@ function App(): JSX.Element {
     }
   }
 
+  // Sync the local "last seen" baseline after applying a WS broadcast so
+  // syncToBackend's delta detection treats those elements as already in sync
+  // and doesn't re-upload them. Without this, every MCP-driven create fires a
+  // follow-up sync/v2 POST per element. Phase 2 (deterministic ids) means
+  // those POSTs are no-ops on the row, but they still bump sync_version and
+  // generate broadcast traffic. Hygiene, not correctness.
+  const applyWsBaseline = (
+    sceneAfter: readonly any[],
+    upserted: ServerElement[],
+    deleted: string[],
+    syncVersion?: number
+  ): void => {
+    for (const el of upserted) lastSyncedElementsRef.current.set(el.id, el)
+    for (const id of deleted) lastSyncedElementsRef.current.delete(id)
+    lastSyncedHashRef.current = computeElementHash(sceneAfter)
+    if (typeof syncVersion === 'number') {
+      lastSyncVersionRef.current = syncVersion
+      // lastReceivedSyncVersionRef is already updated above, before the switch.
+      localStorage.setItem('excalidraw-last-sync-version', String(syncVersion))
+    }
+  }
+
   const handleWebSocketMessage = async (data: WebSocketMessage): Promise<void> => {
     // Gap detection (Task 12): if a message carries sync_version, check for gaps
     if (data.sync_version !== undefined && typeof data.sync_version === 'number') {
@@ -418,10 +440,11 @@ function App(): JSX.Element {
             }
             const scene = api.getSceneElements()
             const landed = scene.some(s => s.id === data.element!.id)
+            applyWsBaseline(scene, [data.element], [], data.sync_version)
             sendAck(data.msgId, landed ? 'applied' : 'failed', landed ? 1 : 0, 1)
           }
           break
-          
+
         case 'element_updated':
           if (data.element) {
             const cleanedUpdatedElement = cleanElementForExcalidraw(data.element)
@@ -433,6 +456,7 @@ function App(): JSX.Element {
               elements: updatedElements,
               captureUpdate: CaptureUpdateAction.NEVER
             })
+            applyWsBaseline(api.getSceneElements(), [data.element], [], data.sync_version)
             sendAck(data.msgId, 'applied', 1, 1)
           }
           break
@@ -444,6 +468,7 @@ function App(): JSX.Element {
               elements: filteredElements,
               captureUpdate: CaptureUpdateAction.NEVER
             })
+            applyWsBaseline(api.getSceneElements(), [], [data.elementId], data.sync_version)
             sendAck(data.msgId, 'applied', 1, 1)
           }
           break
@@ -472,6 +497,7 @@ function App(): JSX.Element {
             const expectedIds = data.elements.map((e: ServerElement) => e.id)
             const landedCount = expectedIds.filter(id => scene.some(s => s.id === id)).length
             const status = landedCount === expectedIds.length ? 'applied' : landedCount > 0 ? 'partial' : 'failed'
+            applyWsBaseline(scene, data.elements, [], data.sync_version)
             sendAck(data.msgId, status, landedCount, expectedIds.length)
           }
           break

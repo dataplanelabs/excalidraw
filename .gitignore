@@ -28,3 +28,6 @@ coverage/
 
 docs/*
 !docs/screenshots/
+
+# Local planning + reports — not part of the codebase
+plans/
